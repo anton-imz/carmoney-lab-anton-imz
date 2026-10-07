@@ -26,16 +26,17 @@ final class AssessmentServiceTest extends TestCase
             new LtvCalculator(),
             new DecisionEngine($rules['ltv']),
             $age,
+            (int) $rules['vehicle']['review_mileage_km'],
         );
     }
 
     /** @return array<string,mixed> */
-    private function payload(int $amount, int $marketValue): array
+    private function payload(int $amount, int $marketValue, int $mileage = 96000): array
     {
         return [
             'vin' => 'XTA21099998765432',
             'year' => (int) date('Y') - 4,
-            'mileage' => 96000,
+            'mileage' => $mileage,
             'market_value' => $marketValue,
             'requested_amount' => $amount,
             'term_months' => 24,
@@ -64,6 +65,42 @@ final class AssessmentServiceTest extends TestCase
     public function testRejectsHighLtv(): void
     {
         $result = $this->service->assess($this->payload(855000, 900000));
+
+        self::assertSame(95.0, $result['ltv']);
+        self::assertSame(DecisionEngine::REJECT, $result['decision']);
+        self::assertSame(0, $result['approved_limit']);
+    }
+
+    public function testApprovesMileageJustBelowReviewThreshold(): void
+    {
+        $result = $this->service->assess($this->payload(450000, 900000, 399999));
+
+        self::assertSame(50.0, $result['ltv']);
+        self::assertSame(DecisionEngine::APPROVE, $result['decision']);
+        self::assertSame(450000, $result['approved_limit']);
+    }
+
+    public function testApprovesMileageAtReviewThreshold(): void
+    {
+        $result = $this->service->assess($this->payload(450000, 900000, 400000));
+
+        self::assertSame(50.0, $result['ltv']);
+        self::assertSame(DecisionEngine::APPROVE, $result['decision']);
+        self::assertSame(450000, $result['approved_limit']);
+    }
+
+    public function testSendsMileageAboveThresholdToReviewWithZeroLimit(): void
+    {
+        $result = $this->service->assess($this->payload(450000, 900000, 400001));
+
+        self::assertSame(50.0, $result['ltv']);
+        self::assertSame(DecisionEngine::REVIEW, $result['decision']);
+        self::assertSame(0, $result['approved_limit']);
+    }
+
+    public function testHighMileageDoesNotSoftenReject(): void
+    {
+        $result = $this->service->assess($this->payload(855000, 900000, 400001));
 
         self::assertSame(95.0, $result['ltv']);
         self::assertSame(DecisionEngine::REJECT, $result['decision']);
