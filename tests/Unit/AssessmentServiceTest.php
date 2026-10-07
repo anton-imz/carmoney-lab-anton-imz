@@ -106,4 +106,49 @@ final class AssessmentServiceTest extends TestCase
         self::assertSame(DecisionEngine::REJECT, $result['decision']);
         self::assertSame(0, $result['approved_limit']);
     }
+
+    public function testHighMileageDoesNotChangeLtvReview(): void
+    {
+        // Arrange / Act
+        $result = $this->service->assess($this->payload(675000, 900000, 400001));
+
+        // Assert
+        self::assertSame(75.0, $result['ltv']);
+        self::assertSame(DecisionEngine::REVIEW, $result['decision']);
+        self::assertSame(0, $result['approved_limit']);
+    }
+
+    public function testReadsReviewThresholdFromRules(): void
+    {
+        // Arrange: сервис, собранный с другим порогом из «справочника»
+        $rules = require __DIR__ . '/../../backend/config/rules.php';
+        $rules['vehicle']['review_mileage_km'] = 399999;
+        $age = new VehicleAge((int) date('Y'));
+
+        $service = new AssessmentService(
+            new ApplicationValidator($rules, new VinValidator($rules['vin']), $age),
+            new LtvCalculator(),
+            new DecisionEngine($rules['ltv']),
+            $age,
+            (int) $rules['vehicle']['review_mileage_km'],
+        );
+
+        // Act
+        $oldThresholdStillApproves = $service->assess($this->payload(450000, 900000, 400000));
+        $aboveNewThreshold = $service->assess($this->payload(450000, 900000, 400001));
+
+        // Assert
+        self::assertSame(DecisionEngine::REVIEW, $oldThresholdStillApproves['decision']);
+        self::assertSame(DecisionEngine::REVIEW, $aboveNewThreshold['decision']);
+    }
+
+    public function testAcceptsMaxMileageBoundary(): void
+    {
+        // Arrange / Act
+        $result = $this->service->assess($this->payload(450000, 900000, 500000));
+
+        // Assert
+        self::assertSame(DecisionEngine::REVIEW, $result['decision']);
+        self::assertSame(0, $result['approved_limit']);
+    }
 }
