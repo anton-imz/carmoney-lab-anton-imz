@@ -53,6 +53,28 @@ final class ApplicationValidatorTest extends TestCase
         $this->validator->validate($this->validPayload(['year' => (int) date('Y') + 1]));
     }
 
+    public function testRejectsMissingMileage(): void
+    {
+        try {
+            $payload = $this->validPayload();
+            unset($payload['mileage']);
+            $this->validator->validate($payload);
+            self::fail('Ожидали ValidationException');
+        } catch (ValidationException $exception) {
+            self::assertArrayHasKey('mileage', $exception->errors());
+        }
+    }
+
+    public function testRejectsNullMileage(): void
+    {
+        try {
+            $this->validator->validate($this->validPayload(['mileage' => null]));
+            self::fail('Ожидали ValidationException');
+        } catch (ValidationException $exception) {
+            self::assertArrayHasKey('mileage', $exception->errors());
+        }
+    }
+
     public function testRejectsAmountBelowMinimum(): void
     {
         try {

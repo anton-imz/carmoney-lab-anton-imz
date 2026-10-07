@@ -7,6 +7,9 @@ namespace CarMoneyLab\Domain;
 /**
  * Предварительная оценка заявки: валидация -> LTV -> решение -> лимит.
  *
+ * Пробег больше vehicle.review_mileage_km (400 000 км) понижает решение
+ * approve до review; решения review и reject пробег не меняет.
+ *
  * Лимит сейчас равен запрошенной сумме при approve и нулю в остальных случаях.
  * Расчёт лимита по максимальному LTV для возраста авто (справочник
  * rules.ltv_by_age) — задача LOAN-12, она ещё не сделана.
@@ -18,6 +21,7 @@ final class AssessmentService
         private readonly LtvCalculator $ltvCalculator,
         private readonly DecisionEngine $decisionEngine,
         private readonly VehicleAge $vehicleAge,
+        private readonly int $reviewMileageKm,
     ) {
     }
 
@@ -31,6 +35,10 @@ final class AssessmentService
 
         $ltv = $this->ltvCalculator->calculate($input['requested_amount'], $input['market_value']);
         $decision = $this->decisionEngine->decide($ltv);
+
+        if ($decision === DecisionEngine::APPROVE && $input['mileage'] > $this->reviewMileageKm) {
+            $decision = DecisionEngine::REVIEW;
+        }
 
         return [
             'vehicle_age' => $this->vehicleAge->inYears($input['year']),
